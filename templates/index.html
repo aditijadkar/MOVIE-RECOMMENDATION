@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Movie Recommender</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/darkmode.js" defer></script>
+
+
+  <style>
+    .movie-popup {
+      position: fixed;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: white;
+      color: black;
+      padding: 20px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      display: none;
+      z-index: 9999;
+    }
+    .dark-mode .movie-popup {
+      background: #222;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 Movie Recommender</h1>
+    <button onclick="toggleDarkMode()">🌙 Toggle Light/Dark Mode</button>
+    
+    <div class="controls">
+      <input type="text" id="movieInput" placeholder="Search a movie..." oninput="liveSearch()" list="suggestions">
+      <datalist id="suggestions"></datalist>
+      <select id="genre">
+        <option value="">Genre</option>
+      </select>
+      <select id="certificate">
+        <option value="">Certificate</option>
+        <option value="PG">PG</option>
+        <option value="PG-13">PG-13</option>
+        <option value="R">R</option>
+      </select>
+      <input type="number" id="minRating" placeholder="Min Rating (e.g., 7.5)">
+      <select id="sortBy">
+        <option value="">Sort By</option>
+        <option value="az">A - Z</option>
+        <option value="za">Z - A</option>
+        <option value="rating">Rating</option>
+        <option value="year">Year</option>
+        <option value="votes">Votes</option>
+        <option value="gross">Gross</option>
+      </select>
+      <button id="clearBtn">Clear</button>
+      <button onclick="recommend()">🎯 Recommend</button>
+      <button onclick="surprise()">🎲 Surprise Me</button>
+    </div>
+    
+    <div id="results" style="margin-top: 20px;"></div>
+    
+    <div style="text-align:center; margin-top:20px;">
+      <button id="viewMoreBtn" style="display:none;" onclick="viewMore()">View More</button>
+    </div>
+    
+    <div class="movie-popup" id="popup"></div>
+  </div>
+
+  <script>
+    let offset = 0;
+    let lastRequestData = {};
+
+    async function liveSearch() {
+      const query = document.getElementById("movieInput").value;
+      if (!query) return;
+      const res = await fetch(`/search?query=${encodeURIComponent(query)}`);
+      const suggestions = await res.json();
+      const datalist = document.getElementById("suggestions");
+      datalist.innerHTML = "";
+      suggestions.forEach(title => {
+        const option = document.createElement("option");
+        option.value = title;
+        datalist.appendChild(option);
+      });
+    }
+
+    async function recommend() {
+      offset = 0;
+      const title = document.getElementById("movieInput").value;
+      const genre = document.getElementById("genre").value;
+      const certificate = document.getElementById("certificate").value;
+      const rating = document.getElementById("minRating").value;
+      const sortBy = document.getElementById("sortBy").value;
+
+      lastRequestData = { title, genre, certificate, rating, sort_by: sortBy, offset };
+      await fetchAndRender();
+    }
+
+    async function fetchAndRender() {
+      const res = await fetch('/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(lastRequestData)
+      });
+      const movies = await res.json();
+      if (offset === 0) document.getElementById("results").innerHTML = "";
+      renderResults(movies);
+      offset += movies.length;
+      document.getElementById("viewMoreBtn").style.display = movies.length === 10 ? 'inline-block' : 'none';
+      lastRequestData.offset = offset;
+    }
+
+    function viewMore() {
+      fetchAndRender();
+    }
+
+    async function surprise() {
+      offset = 0;
+      lastRequestData = {};
+      const res = await fetch('/surprise');
+      const movies = await res.json();
+      document.getElementById("results").innerHTML = "";
+      renderResults(movies);
+      document.getElementById("viewMoreBtn").style.display = "none";
+    }
+
+    function renderResults(movies) {
+      const div = document.getElementById("results");
+      if (movies.length === 0) {
+        div.innerHTML = "<p>No movies found.</p>";
+        return;
+      }
+      movies.forEach(movie => {
+        const card = document.createElement("div");
+        card.className = "movie-card";
+        card.innerHTML = `
+          <img src="${movie.Poster_Link}" alt="${movie.Series_Title}" class="poster">
+          <h3>${movie.Series_Title}</h3>
+          <p><strong>Genre:</strong> ${movie.Genre}</p>
+          <p><strong>Year:</strong> ${movie.Released_Year}</p>
+          <p><strong>Rating:</strong> ⭐ ${movie.IMDB_Rating}</p>
+          <p><strong>Stars:</strong> ${movie.Star1}, ${movie.Star2}</p>
+        `;
+        card.onclick = () => showDetails(movie.Series_Title);
+        div.appendChild(card);
+      });
+    }
+
+    async function showDetails(title) {
+      const res = await fetch(`/details?title=${encodeURIComponent(title)}`);
+      const movie = await res.json();
+      const popup = document.getElementById("popup");
+      popup.innerHTML = `
+        <h2>${movie.Series_Title}</h2>
+        <img src="${movie.Poster_Link}" style="max-width:200px"><br>
+        <p><strong>Genre:</strong> ${movie.Genre}</p>
+        <p><strong>Rating:</strong> ⭐ ${movie.IMDB_Rating}</p>
+        <p><strong>Director:</strong> ${movie.Director}</p>
+        <p><strong>Stars:</strong> ${movie.Star1}, ${movie.Star2}, ${movie.Star3}, ${movie.Star4}</p>
+        <p><strong>Runtime:</strong> ${movie.Runtime}</p>
+        <p><strong>Votes:</strong> ${movie.No_of_Votes}</p>
+        <p><strong>Gross:</strong> ${movie.Gross}</p>
+        <p><strong>Overview:</strong> ${movie.Overview}</p>
+        <button onclick="document.getElementById('popup').style.display='none'">Close</button>
+      `;
+      popup.style.display = 'block';
+    }
+
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      document.getElementById("movieInput").value = "";
+      document.getElementById("minRating").value = "";
+      document.getElementById("genre").value = "";
+      document.getElementById("certificate").value = "";
+      document.getElementById("minYear").value = "";
+      document.getElementById("sortBy").value = "";
+      document.getElementById("results").innerHTML = "";
+      document.getElementById("viewMoreBtn").style.display = "none";
+      offset = 0;
+      lastRequestData = {};
+    });
+
+    window.onload = async () => {
+      const genreSelect = document.getElementById("genre");
+      const res = await fetch('/genres');
+      const genres = await res.json();
+      genres.forEach(g => {
+        const option = document.createElement("option");
+        option.value = g;
+        option.innerText = g;
+        genreSelect.appendChild(option);
+      });
+    };
+  </script>
+</body>
+</html>
