@@ -1,4 +1,4 @@
-# Movie Recommendation System
+# Movie Recommendation System:
 
 A Flask‑based web application that provides personalized movie recommendations using content‑based filtering. By leveraging natural language processing (NLP) and TF‑IDF vectorization on movie metadata, this system suggests films tailored to user preferences.
 
